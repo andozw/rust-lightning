@@ -3096,7 +3096,11 @@ impl<Signer: Sign, M: Deref, T: Deref, K: Deref, F: Deref, L: Deref> ChannelMana
 									prev_funding_outpoint } => {
 								let (cltv_expiry, onion_payload, payment_data, phantom_shared_secret) = match routing {
 									PendingHTLCRouting::Receive { payment_data, incoming_cltv_expiry, phantom_shared_secret } => {
-										let _legacy_hop_data = payment_data.clone();
+										let _legacy_hop_data = msgs::FinalOnionHopData {
+											payment_secret: payment_data.payment_secret,
+											payment_metadata: None, // Object is only for serialization backwards compat
+											total_msat: payment_data.total_msat
+										};
 										(incoming_cltv_expiry, OnionPayload::Invoice { _legacy_hop_data }, Some(payment_data), phantom_shared_secret)
 									},
 									PendingHTLCRouting::ReceiveKeysend { payment_preimage, incoming_cltv_expiry } =>
@@ -7320,6 +7324,7 @@ mod tests {
 		let (_, payment_hash, payment_secret) = get_payment_preimage_hash!(&nodes[0]);
 		let payment_data = msgs::FinalOnionHopData {
 			payment_secret,
+			payment_metadata: None,
 			total_msat: 100_000,
 		};
 

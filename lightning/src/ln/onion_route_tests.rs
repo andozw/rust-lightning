@@ -13,7 +13,7 @@
 
 use chain::channelmonitor::{CLTV_CLAIM_BUFFER, LATENCY_GRACE_PERIOD_BLOCKS};
 use chain::keysinterface::{KeysInterface, Recipient};
-use ln::{PaymentHash, PaymentSecret};
+use ln::{PaymentHash, PaymentSecret, RecipientInfo};
 use ln::channelmanager::{HTLCForwardInfo, CLTV_FAR_FAR_AWAY, MIN_CLTV_EXPIRY_DELTA, PendingHTLCInfo, PendingHTLCRouting};
 use ln::onion_utils;
 use routing::network_graph::{NetworkUpdate, RoutingFees, NodeId};
@@ -79,7 +79,8 @@ fn run_onion_failure_test_with_fail_intercept<F1,F2,F3>(_name: &str, test_case: 
 	}
 
 	// 0 ~~> 2 send payment
-	nodes[0].node.send_payment(&route, payment_hash.clone(), &Some(*payment_secret), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(*payment_secret), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash.clone(), &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	let update_0 = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());
 	// temper update_add (0 => 1)
@@ -271,7 +272,8 @@ fn test_fee_failures() {
 
 	// positive case
 	let (route, payment_hash_success, payment_preimage_success, payment_secret_success) = get_route_and_payment_hash!(nodes[0], nodes[2], 40_000);
-	nodes[0].node.send_payment(&route, payment_hash_success, &Some(payment_secret_success), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(payment_secret_success), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash_success, &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	pass_along_route(&nodes[0], &[&[&nodes[1], &nodes[2]]], 40_000, payment_hash_success, payment_secret_success);
 	claim_payment(&nodes[0], &[&nodes[1], &nodes[2]], payment_preimage_success);
@@ -292,7 +294,8 @@ fn test_fee_failures() {
 	}
 
 	let (payment_preimage_success, payment_hash_success, payment_secret_success) = get_payment_preimage_hash!(nodes[2]);
-	nodes[0].node.send_payment(&route, payment_hash_success, &Some(payment_secret_success), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(payment_secret_success), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash_success, &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	pass_along_route(&nodes[0], &[&[&nodes[1], &nodes[2]]], 40_000, payment_hash_success, payment_secret_success);
 	claim_payment(&nodes[0], &[&nodes[1], &nodes[2]], payment_preimage_success);
@@ -647,8 +650,8 @@ fn test_default_to_onion_payload_tlv_format() {
 	assert!(unannounced_chan_hop.node_features.supports_variable_length_onion());
 
 	let cur_height = nodes[0].best_block_info().1 + 1;
-	let (announced_route_payloads, _htlc_msat, _htlc_cltv) = onion_utils::build_onion_payloads(&announced_route.paths[0], 40000, &None, cur_height, &None).unwrap();
-	let (unannounced_route_paylods, _htlc_msat, _htlc_cltv) = onion_utils::build_onion_payloads(&unannounced_route.paths[0], 40000, &None, cur_height, &None).unwrap();
+	let (announced_route_payloads, _htlc_msat, _htlc_cltv) = onion_utils::build_onion_payloads(&announced_route.paths[0], 40000, &None, None, cur_height, &None).unwrap();
+	let (unannounced_route_paylods, _htlc_msat, _htlc_cltv) = onion_utils::build_onion_payloads(&unannounced_route.paths[0], 40000, &None, None, cur_height, &None).unwrap();
 
 	for onion_payloads in vec![announced_route_payloads, unannounced_route_paylods] {
 		for onion_payload in onion_payloads.iter() {
@@ -727,7 +730,7 @@ fn test_do_not_default_to_onion_payload_tlv_format_when_unsupported() {
 	assert!(!hops[2].node_features.supports_variable_length_onion());
 
 	let cur_height = nodes[0].best_block_info().1 + 1;
-	let (onion_payloads, _htlc_msat, _htlc_cltv) = onion_utils::build_onion_payloads(&route.paths[0], 40000, &None, cur_height, &None).unwrap();
+	let (onion_payloads, _htlc_msat, _htlc_cltv) = onion_utils::build_onion_payloads(&route.paths[0], 40000, &None, None, cur_height, &None).unwrap();
 
 	for onion_payload in onion_payloads.iter() {
 		match onion_payload.format {
@@ -796,7 +799,8 @@ fn test_phantom_onion_hmac_failure() {
 	let (route, phantom_scid) = get_phantom_route!(nodes, recv_value_msat, channel);
 
 	// Route the HTLC through to the destination.
-	nodes[0].node.send_payment(&route, payment_hash.clone(), &Some(payment_secret), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(payment_secret), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash.clone(), &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	let update_0 = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());
 	let mut update_add = update_0.update_add_htlcs[0].clone();
@@ -857,7 +861,8 @@ fn test_phantom_invalid_onion_payload() {
 	// We'll use the session priv later when constructing an invalid onion packet.
 	let session_priv = [3; 32];
 	*nodes[0].keys_manager.override_random_bytes.lock().unwrap() = Some(session_priv);
-	nodes[0].node.send_payment(&route, payment_hash.clone(), &Some(payment_secret), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(payment_secret), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash.clone(), &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	let update_0 = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());
 	let mut update_add = update_0.update_add_htlcs[0].clone();
@@ -928,7 +933,8 @@ fn test_phantom_final_incorrect_cltv_expiry() {
 	let (route, phantom_scid) = get_phantom_route!(nodes, recv_value_msat, channel);
 
 	// Route the HTLC through to the destination.
-	nodes[0].node.send_payment(&route, payment_hash.clone(), &Some(payment_secret), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(payment_secret), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash.clone(), &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	let update_0 = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());
 	let mut update_add = update_0.update_add_htlcs[0].clone();
@@ -987,7 +993,8 @@ fn test_phantom_failure_too_low_cltv() {
 	route.paths[0][1].cltv_expiry_delta = 5;
 
 	// Route the HTLC through to the destination.
-	nodes[0].node.send_payment(&route, payment_hash.clone(), &Some(payment_secret), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(payment_secret), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash.clone(), &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	let update_0 = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());
 	let mut update_add = update_0.update_add_htlcs[0].clone();
@@ -1030,7 +1037,8 @@ fn test_phantom_failure_too_low_recv_amt() {
 	let (mut route, phantom_scid) = get_phantom_route!(nodes, bad_recv_amt_msat, channel);
 
 	// Route the HTLC through to the destination.
-	nodes[0].node.send_payment(&route, payment_hash.clone(), &Some(payment_secret), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(payment_secret), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash.clone(), &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	let update_0 = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());
 	let mut update_add = update_0.update_add_htlcs[0].clone();
@@ -1082,7 +1090,8 @@ fn test_phantom_dust_exposure_failure() {
 	let (mut route, _) = get_phantom_route!(nodes, max_dust_exposure + 1, channel);
 
 	// Route the HTLC through to the destination.
-	nodes[0].node.send_payment(&route, payment_hash.clone(), &Some(payment_secret), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(payment_secret), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash.clone(), &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	let update_0 = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());
 	let mut update_add = update_0.update_add_htlcs[0].clone();
@@ -1121,7 +1130,8 @@ fn test_phantom_failure_reject_payment() {
 	let (mut route, phantom_scid) = get_phantom_route!(nodes, recv_amt_msat, channel);
 
 	// Route the HTLC through to the destination.
-	nodes[0].node.send_payment(&route, payment_hash.clone(), &Some(payment_secret), None).unwrap();
+	let recipient_info = RecipientInfo { payment_secret: Some(payment_secret), payment_metadata: None };
+	nodes[0].node.send_payment(&route, payment_hash.clone(), &recipient_info).unwrap();
 	check_added_monitors!(nodes[0], 1);
 	let update_0 = get_htlc_update_msgs!(nodes[0], nodes[1].node.get_our_node_id());
 	let mut update_add = update_0.update_add_htlcs[0].clone();

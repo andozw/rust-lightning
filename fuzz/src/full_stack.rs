@@ -498,7 +498,8 @@ pub fn do_test(data: &[u8], logger: &Arc<dyn Logger>) {
 				let mut payment_secret = PaymentSecret([0; 32]);
 				payment_secret.0[0..8].copy_from_slice(&be64_to_array(payments_sent));
 				payments_sent += 1;
-				match channelmanager.send_payment(&route, payment_hash, &Some(payment_secret)) {
+				let recipient_info = RecipientInfo { payment_secret: Some(payment_secret), payment_metadata: None };
+				match channelmanager.send_payment(&route, payment_hash, &recipient_info) {
 					Ok(_) => {},
 					Err(_) => return,
 				}
